@@ -182,21 +182,21 @@ Proof with simpl in *; eauto.
       * destruct (step e1_1); inversion H...
 Qed.
 
-Fixpoint multistep' n e : option exp :=
+Fixpoint multistep_rec' n e : option exp :=
   match n with
   | 0    => None
   | S n' => match step e with
-           | Some e' => multistep' n' e'
+           | Some e' => multistep_rec' n' e'
            | None    => None
            end
   end.
 
 Definition bigNumber : nat := 5000.
 
-Definition multistep : exp -> option exp :=
-  multistep' bigNumber.
+Definition multistep' : exp -> option exp :=
+  multistep_rec' bigNumber.
 
-Lemma multistep'_None : forall n e, multistep' n e = None.
+Lemma multistep_rec'_None : forall n e, multistep_rec' n e = None.
 Proof with auto.
   induction n...
   induction e; simpl...
@@ -210,5 +210,66 @@ Proof with auto.
     + destruct (step e1)...
 Qed.
 
-Definition multistep_None : forall e, multistep e = None :=
-  multistep'_None bigNumber.
+Definition multistep'_None : forall e, multistep' e = None :=
+  multistep_rec'_None bigNumber.
+
+Fixpoint multistep_rec n e : option exp :=
+  if is_value e then Some e
+  else
+    match n with
+    | 0    => Some e
+    | S n' => match step e with
+             | None    => None
+             | Some e' => multistep_rec n' e'
+             end
+    end.
+
+Definition multistep : exp -> option exp :=
+  multistep_rec bigNumber.
+
+Inductive multi {A} (R : A -> A -> Prop) : A -> A -> Prop :=
+  multi_refl : forall x, multi R x x
+| multi_step : forall x y z,
+    R x y ->
+    multi R y z ->
+    multi R x z.
+
+Hint Constructors multi.
+
+Definition multistepR : exp -> exp -> Prop := multi stepR.
+
+Lemma multistepR_multistep_rec : forall e e', multistepR e e' <-> exists n, multistep_rec n e = Some e'.
+Proof with simpl in *; auto.
+  split.
+  - intros.
+    induction H...
+    + exists 0.
+      simpl.
+      destruct (is_value x)...
+    + destruct IHmulti.
+      exists (S x0).
+      simpl.
+      replace (is_value x) with false;
+      apply stepR_step in H;
+      [ | apply step_not_value in H];
+      rewrite H...
+  - intros [n H].
+    generalize dependent e.
+    generalize dependent e'.
+    induction n; intros.
+    + inversion H.
+      destruct (is_value e); inversion H1; constructor.
+    + inversion H; subst.
+      destruct (is_value e); inversion H1; subst; try constructor...
+      destruct (step e) eqn:Hstep; inversion H1.
+      apply stepR_step in Hstep.
+      apply multi_step with e0...
+      apply IHn.
+      destruct (is_value e); inversion H; subst...
+Qed.
+
+Lemma multistep_multistepR : forall e e', multistep e = Some e' -> multistepR e e'.
+Proof with eauto.
+  intros.
+  apply multistepR_multistep_rec...
+Qed.
